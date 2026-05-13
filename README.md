@@ -28,7 +28,7 @@ Note that, unlike a traditional computer where all the empty bytes are "there" b
 
 ### Encoding the data byte
 
-To construct a single byte of data, we use the `Repeat Days`, `Enabled`, and `Snooze` properties of an iOS alarm. The latter two are simple booleans i.e. one bit each.
+To construct a single byte of data, we use the `Repeat Days`, `Is Enabled`, and `Allows Snooze` properties of an iOS alarm. The latter two are simple booleans i.e. one bit each.
 
 `Repeat Days` would seem to be equally simple, i.e. each weekday is treated as a bit (on or off), which would give us seven bits of data. However, due to a [bug in iOS Shortcuts](https://discussions.apple.com/thread/256008048?sortBy=rank), a Shortcut that tries to do anything with the `Repeat Days` of an alarm which has _exactly one_ repeat day will cause the Shortcut to fail. For this reason, we are forced to sacrifice one bit (I chose the Lord's day, Sunday) to guard against this possibility. Essentially, if the remaining six bits (days) is going to have a popcount of `1`, then the seventh bit (Sunday) flips on.
 
@@ -52,3 +52,13 @@ Here, we also slightly cave and use the alarm's `Label` solely for the purpose o
 
 Since the schema is user-defined, each row of data could be interpreted as a single 32-character string, 32 separate one-byte ints, or anything in between.
 
+## Input format
+
+In order to parse iOS alarm data, AlarmDB needs to expect it in a certain serialized format. I settled on a relatively naive approach i.e. a pipe-delimited list of the following:
+
+- The number of alarms
+- Each clock's `Time`
+- Each clock's `Is Enabled`
+- Each clock's `Allows Snooze`
+- Each clock's `Label`
+- Each clock's space-delimited `Repeat Days`
