@@ -136,12 +136,10 @@ def read_schema(bytes: list[AddressedByte]) -> list[Field]:
     schema = []
     current_offset = 0
     for schema_byte in schema_bytes:
-        # Don't need the top bit
-        bottom_7_data_bits = schema_byte.data & ((1 << 7) - 1)
-        # Top 2 bits
-        type = DataType(bottom_7_data_bits >> 5)
+        # Top 3 bits
+        type = DataType(schema_byte.data >> 5)
         # Bottom 5 bits
-        length_bytes = bottom_7_data_bits & ((1 << 5) - 1)
+        length_bytes = schema_byte.data & ((1 << 5) - 1)
         schema.append(
             Field(
                 name=schema_byte.label,
