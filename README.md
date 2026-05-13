@@ -41,7 +41,7 @@ Since we're only using the bottom 10 full bytes of the alarm address space, `0x1
 The bits of a field's byte are broken up into two parts:
 
 - Bits 0-2: Data type
-- Buts 3-7: Length in bytes minus 1 (i.e. `0x00000 -> 1` and `0x11111 -> 32`)
+- Bits 3-7: Length in bytes minus 1 (i.e. `0x00000 -> 1` and `0x11111 -> 32`)
 
 Despite allowing up to 8 data types, AlarmDB currently only supports three:
 
