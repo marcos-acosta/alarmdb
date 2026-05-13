@@ -40,15 +40,16 @@ Since we're only using the bottom 10 full bytes of the alarm address space, `0x1
 
 The bits of a field's byte are broken up into two parts:
 
-- Bits 1-2: Data type
-- Buts 3-7: Length in bytes minus 1
+- Bits 0-2: Data type
+- Buts 3-7: Length in bytes minus 1 (i.e. `0x00000 -> 1` and `0x11111 -> 32`)
 
-AlarmDB currently only supports two data types:
+Despite allowing up to 8 data types, AlarmDB currently only supports three:
 
-- `string` (`0x00`): Parsed as UTF-8, truncated by null terminator (`\x00`)
-- `int` (`0x01`): Parsed as a two's complement signed int
+- `string` (`0x000`): Parsed as UTF-8, truncated by null terminator (`\x00`)
+- `int` (`0x001`): Parsed as a two's complement signed int
+- `uint` (`0x010`): Parsed as an unsigned int
 
-Here, we also slightly cave and use the alarm's `Label` solely for the purpose of naming the field, because otherwise I'd get an infinite regression of string encoding.
+Here, I slightly caved and use the alarm's `Label` solely for the purpose of naming the field. There's a way to do it without it, but I didn't want to :)
 
 Since the schema is user-defined, each row of data could be interpreted as a single 32-character string, 32 separate one-byte ints, or anything in between.
 
