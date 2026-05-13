@@ -1,2 +1,0 @@
-[Field(name='name', datatype=<DataType.STRING: 0>, length_bytes=6, start_offset_bytes=0, end_offset_bytes=6), Field(name='age', datatype=<DataType.INT: 1>, length_bytes=1, start_offset_bytes=6, end_offset_bytes=7)]
-[{'name': 'marcos', 'age': 24}, {'name': 'ava', 'age': 27}]
