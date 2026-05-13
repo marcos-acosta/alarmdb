@@ -12,11 +12,11 @@ Each address is a word with 32 bytes.
 
 An iOS alarm contains the following parameters:
 
-- A time (HH:MM)
-- Which days of the week it repeats (if any)
-- Whether it is enabled
-- Whether it can be snoozed
-- A label (optional)
+- `Time` (e.g. `"12:15 PM"`)
+- `Repeat Days` (e.g. `["Monday", "Friday"]`)
+- `Is Enabled` (`"Yes"/"No"`)
+- `Allows Snooze` (`"Yes"/"No"`)
+- `Label` (arbitrary string)
 
 Note that we _could_ store all our data in the label, but that would take all the fun out of it.
 
