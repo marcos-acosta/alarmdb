@@ -38,7 +38,6 @@ class NyQLEngine:
                 return EngineResult()
 
     def run_select_statement(self, statement: nq.SelectStmt) -> Table:
-        display_names = [self._display_name(col) for col in statement.cols]
         records = self.records
         if statement.where is not None:
             records = [r for r in records if self._eval_condition(statement.where, r)]
@@ -46,6 +45,11 @@ class NyQLEngine:
             records = self._sort_records(records, statement.order_by)
         if statement.limit is not None:
             records = records[:statement.limit]
+        if statement.cols is None:
+            col_names = [field.name for field in self.schema]
+            rows = [[r.get(col) for col in col_names] for r in records]
+            return Table(cols=col_names, rows=rows)
+        display_names = [self._display_name(col) for col in statement.cols]
         rows = [
             [self._eval_expr(col.expr, record) for col in statement.cols]
             for record in records

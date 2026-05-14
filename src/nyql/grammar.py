@@ -18,7 +18,8 @@ grammar = r"""
     order_by_clause: "ORDER" "BY" name_list
     limit_clause:    "LIMIT" INT
 
-    select_cols: select_col ("," select_col)*
+    select_cols: "*"                        -> select_all
+               | select_col ("," select_col)*
     select_col:  expr ("AS" NAME)?
 
     delete_stmt: "DELETE" "WHERE" expr

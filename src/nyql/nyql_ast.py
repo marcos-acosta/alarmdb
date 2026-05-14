@@ -37,7 +37,7 @@ class SelectCol:
 
 @dataclass
 class SelectStmt:
-    cols: list[SelectCol]
+    cols: list[SelectCol] | None  # None = SELECT *
     where: Optional[Expr]
     group_by: Optional[list[str]]
     having: Optional[Expr]
@@ -121,6 +121,9 @@ class NyQLTransformer(Transformer):
     def div(self, args): return BinOp(op="/", left=args[0], right=args[1])
 
     # Select
+    def select_all(self, args):
+        return None
+
     def select_col(self, args):
         expr = args[0]
         alias = str(args[1]) if len(args) > 1 else None
