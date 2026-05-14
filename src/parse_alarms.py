@@ -23,6 +23,7 @@ class DataType(Enum):
     UINT = 1
     INT = 2
     TIMESTAMP = 3
+    BOOL = 4
 
 
 class Alarm(NamedTuple):
@@ -195,6 +196,10 @@ def read_bytes_as_timestamp(bytes: list[AddressedByte]) -> datetime:
     return datetime.fromtimestamp(read_bytes_as_uint(bytes))
 
 
+def read_bytes_as_boolean(bytes: list[AddressedByte]) -> bool:
+    return read_bytes_as_uint(bytes) > 0
+
+
 def read_word_with_schema(word: Word, schema: list[Field]):
     row = dict()
     row[PK_FIELD_NAME] = word.address
@@ -211,6 +216,8 @@ def read_word_with_schema(word: Word, schema: list[Field]):
                 row[field.name] = read_bytes_as_signed_int(bytes)
             case DataType.TIMESTAMP:
                 row[field.name] = read_bytes_as_timestamp(bytes)
+            case DataType.BOOL:
+                row[field.name] = read_bytes_as_boolean(bytes)
             case _:
                 pass
     return row

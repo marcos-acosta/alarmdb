@@ -22,7 +22,7 @@ Note that we _could_ store all our data in the label, but that would take all th
 
 ### Addressing
 
-There are `24*60=1440` possible alarm times, which works out to 10.49 bits. AlarmDB uses the 10 full (i.e. least significant) bits for addressing: the first 5 bits encode the address of the word (`0-31`), and the next 5 bits encode the byte offset within the word (`0-31`). We treat each word as a row of data.
+There are `24*60=1440` possible alarm times, which works out to 10.49 bits. AlarmDB uses the 10 full (i.e. least significant) bits for addressing: the first 5 bits encode the address of the word (`0-31`), and the next 5 bits encode the byte offset within the word (`0-31`). We treat each word as a record.
 
 Note that, unlike a traditional computer where all the empty bytes are "there" by default, empty bytes are _implicit_ in AlarmDB, that is, there's just no alarm for it. For that reason, we have to explicitly encode the byte offset.
 
@@ -36,27 +36,32 @@ Since the Lord's day is now exempt from doing work, we have six bits from `Repea
 
 ### Encoding the schema
 
-Since we're only using the bottom 10 full bytes of the alarm address space, `0x10000000000-0x10110100000` i.e. 5:04PM-11:59PM is effectively "reserved" and we can use it to safely store the schema of the database separately from the data. In reality, only `0x10000000000-0x10000011111` (5:04PM-5:36PM) would be used because each row (word) has up to 32 bytes, so there can be at most 32 fields.
+Since we're only using the bottom 10 full bytes of the alarm address space, `0x10000000000-0x10110100000` i.e. 5:04PM-11:59PM is effectively "reserved" and we can use it to safely store the schema of the database separately from the data. In reality, only `0x10000000000-0x10000011111` (5:04PM-5:36PM) would be used because each record (word) has up to 32 bytes, so there can be at most 32 fields.
 
 The bits of a field's byte are broken up into two parts:
 
 - Bits 0-2: Data type
 - Bits 3-7: Length in bytes minus 1 (i.e. `0x00000 -> 1` and `0x11111 -> 32`)
 
-Despite allowing up to 8 data types, AlarmDB currently only supports three:
+Despite allowing up to 8 data types, AlarmDB currently only supports five:
 
 - `TEXT` (`0x000`): Parsed as UTF-8, truncated by null terminator (`\x00`)
 - `UINT` (`0x001`): Parsed as an unsigned int
 - `INT` (`0x010`): Parsed as a two's complement signed int
 - `TIMESTAMP` (`0x011`): Parsed as an unsigned int and treated as a POSIX timestamp
+- `BOOLEAN` (`0x100`): `false` if every bit is off, `true` otherwise
 
 Here, I slightly caved and use the alarm's `Label` solely for the purpose of naming the field. There's a way to do it without it, but I didn't want to :)
 
-Since the schema is user-defined, each row of data could be interpreted as a single 32-character string, 32 separate one-byte ints, or anything in between.
+Since the schema is user-defined, each record could be interpreted as a single 32-character string, 32 separate one-byte ints, or anything in between.
+
+### Notes
+
+One implication of this setup is that there is no concept of a `NULL` value. As long as there is at least one alarm at an address, it is assumed that the word at that address represents a full record. If there are no alarms in the byte offsets where the schema expects there to be, then they are assumed to be all zero. In other words, the "default" value for a missing int is `0`, `""` for missing strings, `false` for missing booleans, and `January 1, 1970` for missing timestamps.
 
 ## Input format
 
-In order to parse iOS alarm data, AlarmDB needs to expect it in a certain serialized format. I settled on a relatively naive approach i.e. a pipe-delimited list of the following:
+In order to parse and process iOS alarm data, AlarmDB expects it in a certain serialized format. I settled on a relatively naive approach i.e. a pipe-delimited list of the following:
 
 - The number of alarms
 - Each clock's `Time`
