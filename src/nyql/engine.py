@@ -42,11 +42,20 @@ class NyQLEngine:
         records = self.records
         if statement.where is not None:
             records = [r for r in records if self._eval_condition(statement.where, r)]
+        if statement.order_by is not None:
+            records = self._sort_records(records, statement.order_by)
+        if statement.limit is not None:
+            records = records[:statement.limit]
         rows = [
             [self._eval_expr(col.expr, record) for col in statement.cols]
             for record in records
         ]
         return Table(cols=display_names, rows=rows)
+
+    def _sort_records(self, records: list[dict], order_by: list[str]) -> list[dict]:
+        def sort_key(record: dict):
+            return tuple((record.get(col) is None, record.get(col)) for col in order_by)
+        return sorted(records, key=sort_key)
 
     def _display_name(self, col: nq.SelectCol) -> str:
         if col.alias:
