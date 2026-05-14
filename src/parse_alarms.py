@@ -4,6 +4,7 @@ from typing import NamedTuple
 from functools import reduce
 from enum import Enum
 from collections import defaultdict
+from datetime import datetime
 import csv
 import io
 
@@ -12,14 +13,16 @@ LOGDIR = HOMEDIR / "logs"
 LOGDIR.mkdir(exist_ok=True)
 LOGPATH = LOGDIR / "logfile.txt"
 
+PK_FIELD_NAME = "_id"
+
 data = sys.stdin.read()
 
 
 class DataType(Enum):
-    STRING = 0
-    INT = 1
-    FLOAT = 2
-    UNDEFINED = 3
+    TEXT = 0
+    UINT = 1
+    INT = 2
+    TIMESTAMP = 3
 
 
 class Alarm(NamedTuple):
@@ -138,8 +141,8 @@ def read_schema(bytes: list[AddressedByte]) -> list[Field]:
     for schema_byte in schema_bytes:
         # Top 3 bits
         type = DataType(schema_byte.data >> 5)
-        # Bottom 5 bits
-        length_bytes = schema_byte.data & ((1 << 5) - 1)
+        # Bottom 5 bits (add 1 to represent 1-32 instead of 0-31)
+        length_bytes = (schema_byte.data & ((1 << 5) - 1)) + 1
         schema.append(
             Field(
                 name=schema_byte.label,
@@ -177,21 +180,37 @@ def read_bytes_as_string(bytes: list[AddressedByte]) -> str:
     return string.split("\x00")[0]
 
 
-def read_bytes_as_int(bytes: list[AddressedByte]) -> int:
+def read_bytes_as_uint(bytes: list[AddressedByte]) -> int:
     return reduce(lambda a, b: (a << 8) + b, [b.data for b in bytes], 0)
+
+
+def read_bytes_as_signed_int(bytes: list[AddressedByte]) -> int:
+    uint = read_bytes_as_uint(bytes)
+    total_num_bits = len(bytes) * 8
+    is_negative = uint >> (total_num_bits - 1) == 1
+    return -(uint ^ ((1 << total_num_bits) - 1)) - 1 if is_negative else uint
+
+
+def read_bytes_as_timestamp(bytes: list[AddressedByte]) -> datetime:
+    return datetime.fromtimestamp(read_bytes_as_uint(bytes))
 
 
 def read_word_with_schema(word: Word, schema: list[Field]):
     row = dict()
+    row[PK_FIELD_NAME] = word.address
     for field in schema:
         bytes = read_word_bytes_in_offset_range_with_defaults(
             word, field.start_offset_bytes, field.end_offset_bytes
         )
         match field.datatype:
-            case DataType.STRING:
+            case DataType.TEXT:
                 row[field.name] = read_bytes_as_string(bytes)
+            case DataType.UINT:
+                row[field.name] = read_bytes_as_uint(bytes)
             case DataType.INT:
-                row[field.name] = read_bytes_as_int(bytes)
+                row[field.name] = read_bytes_as_signed_int(bytes)
+            case DataType.TIMESTAMP:
+                row[field.name] = read_bytes_as_timestamp(bytes)
             case _:
                 pass
     return row
@@ -203,7 +222,7 @@ def read_words_with_schema(words: list[Word], schema: list[Field]) -> list[dict]
 
 def print_as_csv(rows: list[dict], schema: list[Field]):
     buf = io.StringIO()
-    fieldnames = [field.name for field in schema]
+    fieldnames = [PK_FIELD_NAME] + [field.name for field in schema]
     writer = csv.DictWriter(buf, fieldnames=fieldnames)
     writer.writeheader()
     writer.writerows(rows)

@@ -45,9 +45,10 @@ The bits of a field's byte are broken up into two parts:
 
 Despite allowing up to 8 data types, AlarmDB currently only supports three:
 
-- `string` (`0x000`): Parsed as UTF-8, truncated by null terminator (`\x00`)
-- `int` (`0x001`): Parsed as a two's complement signed int
-- `uint` (`0x010`): Parsed as an unsigned int
+- `TEXT` (`0x000`): Parsed as UTF-8, truncated by null terminator (`\x00`)
+- `UINT` (`0x001`): Parsed as an unsigned int
+- `INT` (`0x010`): Parsed as a two's complement signed int
+- `TIMESTAMP` (`0x011`): Parsed as an unsigned int and treated as a POSIX timestamp
 
 Here, I slightly caved and use the alarm's `Label` solely for the purpose of naming the field. There's a way to do it without it, but I didn't want to :)
 
