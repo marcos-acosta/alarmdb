@@ -38,8 +38,43 @@ class NyQLEngine:
                 return EngineResult()
 
     def run_select_statement(self, statement: nq.SelectStmt) -> Table:
-        col_names = [
-            col.expr.name for col in statement.cols if isinstance(col.expr, nq.ColRef)
+        display_names = [self._display_name(col) for col in statement.cols]
+        rows = [
+            [self._eval_expr(col.expr, record) for col in statement.cols]
+            for record in self.records
         ]
-        rows = [[record.get(col, None) for col in col_names] for record in self.records]
-        return Table(cols=col_names, rows=rows)
+        return Table(cols=display_names, rows=rows)
+
+    def _display_name(self, col: nq.SelectCol) -> str:
+        if col.alias:
+            return col.alias
+        if isinstance(col.expr, nq.ColRef):
+            return col.expr.name
+        raise ValueError(f"Expression requires an AS alias")
+
+    def _eval_expr(self, expr: nq.Expr, record: dict) -> Any:
+        match expr:
+            case nq.Literal(value=v):
+                return v
+            case nq.ColRef(name=n):
+                return record.get(n, None)
+            case nq.BinOp(op=op, left=left, right=right):
+                lv = self._eval_expr(left, record)
+                rv = self._eval_expr(right, record)
+                if not isinstance(lv, (int, float)) or not isinstance(rv, (int, float)):
+                    raise TypeError(
+                        f"Arithmetic on non-numeric values: {lv!r} {op} {rv!r}"
+                    )
+                match op:
+                    case "+":
+                        return lv + rv
+                    case "-":
+                        return lv - rv
+                    case "*":
+                        return lv * rv
+                    case "/":
+                        return lv / rv
+                    case _:
+                        raise ValueError(f"Unsupported operator in SELECT: {op}")
+            case _:
+                raise ValueError(f"Unsupported expression type: {type(expr)}")
