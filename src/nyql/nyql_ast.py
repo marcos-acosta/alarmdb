@@ -36,12 +36,17 @@ class SelectCol:
     alias: Optional[str]
 
 @dataclass
+class OrderByCol:
+    name: str
+    ascending: bool = True
+
+@dataclass
 class SelectStmt:
     cols: list[SelectCol] | None  # None = SELECT *
     where: Optional[Expr]
     group_by: Optional[list[str]]
     having: Optional[Expr]
-    order_by: Optional[list[str]]
+    order_by: Optional[list[OrderByCol]]
     limit: Optional[int]
 
 
@@ -138,7 +143,12 @@ class NyQLTransformer(Transformer):
     def where_clause(self, args):    return ("where", args[0])
     def group_by_clause(self, args): return ("group_by", args[0])
     def having_clause(self, args):   return ("having", args[0])
-    def order_by_clause(self, args): return ("order_by", args[0])
+    def order_col(self, args):
+        name = str(args[0])
+        ascending = len(args) < 2 or str(args[1]) != "DESC"
+        return OrderByCol(name=name, ascending=ascending)
+
+    def order_by_clause(self, args): return ("order_by", list(args))
     def limit_clause(self, args):    return ("limit", int(args[0]))
 
     def select_stmt(self, args):

@@ -15,7 +15,8 @@ grammar = r"""
     where_clause:    "WHERE" expr
     group_by_clause: "GROUP" "BY" name_list
     having_clause:   "HAVING" expr
-    order_by_clause: "ORDER" "BY" name_list
+    order_by_clause: "ORDER" "BY" order_col ("," order_col)*
+    !order_col: NAME ("ASC" | "DESC")?
     limit_clause:    "LIMIT" INT
 
     select_cols: "*"                        -> select_all

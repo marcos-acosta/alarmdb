@@ -56,10 +56,14 @@ class NyQLEngine:
         ]
         return Table(cols=display_names, rows=rows)
 
-    def _sort_records(self, records: list[dict], order_by: list[str]) -> list[dict]:
-        def sort_key(record: dict):
-            return tuple((record.get(col) is None, record.get(col)) for col in order_by)
-        return sorted(records, key=sort_key)
+    def _sort_records(self, records: list[dict], order_by: list[nq.OrderByCol]) -> list[dict]:
+        for col in reversed(order_by):
+            records = sorted(
+                records,
+                key=lambda r: (r.get(col.name) is None, r.get(col.name)),
+                reverse=not col.ascending,
+            )
+        return records
 
     def _display_name(self, col: nq.SelectCol) -> str:
         if col.alias:
