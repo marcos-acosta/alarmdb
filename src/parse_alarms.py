@@ -1,6 +1,5 @@
-import sys
 from pathlib import Path
-from typing import NamedTuple
+from typing import NamedTuple, Tuple
 from functools import reduce
 from enum import Enum
 from collections import defaultdict
@@ -14,8 +13,6 @@ LOGDIR.mkdir(exist_ok=True)
 LOGPATH = LOGDIR / "logfile.txt"
 
 PK_FIELD_NAME = "_id"
-
-data = sys.stdin.read()
 
 
 class DataType(Enum):
@@ -146,7 +143,7 @@ def read_schema(bytes: list[AddressedByte]) -> list[Field]:
         length_bytes = (schema_byte.data & ((1 << 5) - 1)) + 1
         schema.append(
             Field(
-                name=schema_byte.label,
+                name=schema_byte.label or "",
                 datatype=type,
                 length_bytes=length_bytes,
                 start_offset_bytes=current_offset,
@@ -227,26 +224,9 @@ def read_words_with_schema(words: list[Word], schema: list[Field]) -> list[dict]
     return [read_word_with_schema(word, schema) for word in words]
 
 
-def print_as_csv(rows: list[dict], schema: list[Field]):
-    buf = io.StringIO()
-    fieldnames = [PK_FIELD_NAME] + [field.name for field in schema]
-    writer = csv.DictWriter(buf, fieldnames=fieldnames)
-    writer.writeheader()
-    writer.writerows(rows)
-    print(buf.getvalue())
-
-
-def main(data):
-    bytes = parse_data_to_bytes(data)
+def parse_serialized_alarms(serialized_alarms: str) -> Tuple[list[dict], list[Field]]:
+    bytes = parse_data_to_bytes(serialized_alarms)
     schema = read_schema(bytes)
     data_words = get_data_words(bytes)
-    rows = read_words_with_schema(data_words, schema)
-    with open(LOGPATH, "w") as f:
-        f.write(str(schema))
-        f.write("\n")
-        f.write(str(rows))
-    print_as_csv(rows, schema)
-
-
-main(data)
-sys.exit(0)
+    records = read_words_with_schema(data_words, schema)
+    return records, schema
