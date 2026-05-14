@@ -1,6 +1,8 @@
 # AlarmDB
 
-AlarmDB is a word-addressed, schema-driven record store backed by the iOS Clock app.
+AlarmDB is a word-addressed, schema-driven row-based database backed by the iOS Clock app.
+
+It can be interfaced via NyQL, a bespoke SQL-like query language.
 
 ## Address space
 
@@ -59,13 +61,6 @@ Since the schema is user-defined, each record could be interpreted as a single 3
 
 One implication of this setup is that there is no concept of a `NULL` value. As long as there is at least one alarm at an address, it is assumed that the word at that address represents a full record. If there are no alarms in the byte offsets where the schema expects there to be, then they are assumed to be all zero. In other words, the "default" value for a missing int is `0`, `""` for missing strings, `false` for missing booleans, and `January 1, 1970` for missing timestamps.
 
-## Input format
+## Querying
 
-In order to parse and process iOS alarm data, AlarmDB expects it in a certain serialized format. I settled on a relatively naive approach i.e. a pipe-delimited list of the following:
-
-- The number of alarms
-- Each clock's `Time`
-- Each clock's `Is Enabled`
-- Each clock's `Allows Snooze`
-- Each clock's `Label`
-- Each clock's space-delimited `Repeat Days`
+TBD
