@@ -32,7 +32,7 @@ grammar = r"""
     get_schema_stmt: "GET" "SCHEMA"
     set_schema_stmt: "SET" "SCHEMA" schema_col ("," schema_col)*
     schema_col:      "(" ESCAPED_STRING "," col_type "," INT ")"
-    col_type:        "TEXT" | "INT" | "FLOAT"
+    !col_type:       "TEXT" | "INT" | "FLOAT"
 
     name_list: NAME ("," NAME)*
 
@@ -61,7 +61,7 @@ grammar = r"""
             | literal
             | "(" expr ")"
 
-    comp_op: ">" | ">=" | "<" | "<=" | "=" | "!="
+    !comp_op: ">" | ">=" | "<" | "<=" | "=" | "!="
     literal: ESCAPED_STRING | INT | FLOAT
 
     NAME: /[a-zA-Z_]\w*/

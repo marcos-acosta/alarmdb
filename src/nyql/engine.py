@@ -39,9 +39,12 @@ class NyQLEngine:
 
     def run_select_statement(self, statement: nq.SelectStmt) -> Table:
         display_names = [self._display_name(col) for col in statement.cols]
+        records = self.records
+        if statement.where is not None:
+            records = [r for r in records if self._eval_condition(statement.where, r)]
         rows = [
             [self._eval_expr(col.expr, record) for col in statement.cols]
-            for record in self.records
+            for record in records
         ]
         return Table(cols=display_names, rows=rows)
 
@@ -78,3 +81,34 @@ class NyQLEngine:
                         raise ValueError(f"Unsupported operator in SELECT: {op}")
             case _:
                 raise ValueError(f"Unsupported expression type: {type(expr)}")
+
+    def _eval_condition(self, expr: nq.Expr, record: dict) -> bool:
+        match expr:
+            case nq.BinOp(op="AND", left=left, right=right):
+                return self._eval_condition(left, record) and self._eval_condition(
+                    right, record
+                )
+            case nq.BinOp(op="OR", left=left, right=right):
+                return self._eval_condition(left, record) or self._eval_condition(
+                    right, record
+                )
+            case nq.BinOp(op=op, left=left, right=right):
+                lv = self._eval_expr(left, record)
+                rv = self._eval_expr(right, record)
+                match op:
+                    case ">":
+                        return lv > rv
+                    case ">=":
+                        return lv >= rv
+                    case "<":
+                        return lv < rv
+                    case "<=":
+                        return lv <= rv
+                    case "=":
+                        return lv == rv
+                    case "!=":
+                        return lv != rv
+                    case _:
+                        raise ValueError(f"Unsupported operator in WHERE: {op}")
+            case _:
+                raise ValueError(f"Expected a condition, got: {type(expr)}")
