@@ -11,3 +11,7 @@ wheels/
 
 todo.md
 logs
+
+# jupyter
+*.ipynb
+*.ipynb_checkpoints
