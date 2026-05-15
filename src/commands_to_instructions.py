@@ -1,5 +1,5 @@
 from nyql.engine import AddCommand, DeleteCommand, AddSchemaCommand, Command
-from parse_alarms import PK_FIELD_NAME, AddressedByte, get_absolute_byte_offset
+from parse_alarms import AddressedByte, get_absolute_byte_offset
 import copy
 import math
 from typing import Tuple
