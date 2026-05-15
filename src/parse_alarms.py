@@ -4,8 +4,6 @@ from functools import reduce
 from enum import Enum
 from collections import defaultdict
 from datetime import datetime
-import csv
-import io
 
 HOMEDIR = Path("/Users/marcos/m/code/scripting/alarmdb/")
 LOGDIR = HOMEDIR / "logs"
@@ -56,15 +54,15 @@ def create_empty_byte(address, byte_offset):
 
 
 def get_absolute_byte_offset(byte: AddressedByte):
-    return (byte.address << 5) + byte.byte_offset
+    return (byte.address << 5) | byte.byte_offset
 
 
 def is_schema_byte(byte: AddressedByte):
-    return byte.address >> 10 == 1
+    return (byte.address >> 5) & 1 == 1
 
 
 def is_data_byte(byte: AddressedByte):
-    return byte.address >> 10 == 0
+    return (byte.address >> 5) == 0
 
 
 def convert_time(t: str):
@@ -85,7 +83,7 @@ def convert_time_to_address_and_offset(t: str):
     am_pm = t.split(" ")[1]
     hh = h if am_pm == "AM" else h + 12
     total_minutes = hh * 60 + mm
-    return ((total_minutes >> 5) << 5), total_minutes & ((1 << 5) - 1)
+    return total_minutes >> 5, total_minutes & ((1 << 5) - 1)
 
 
 def one_if_present(list, string):
@@ -224,9 +222,11 @@ def read_words_with_schema(words: list[Word], schema: list[Field]) -> list[dict]
     return [read_word_with_schema(word, schema) for word in words]
 
 
-def parse_serialized_alarms(serialized_alarms: str) -> Tuple[list[dict], list[Field]]:
+def parse_serialized_alarms(
+    serialized_alarms: str,
+) -> Tuple[list[AddressedByte], list[dict], list[Field]]:
     bytes = parse_data_to_bytes(serialized_alarms)
     schema = read_schema(bytes)
     data_words = get_data_words(bytes)
     records = read_words_with_schema(data_words, schema)
-    return records, schema
+    return bytes, records, schema

@@ -1,8 +1,9 @@
 from dataclasses import dataclass
 from typing import Any, NamedTuple
 from nyql import nyql_ast as nq
-from parse_alarms import Field
-from enum import Enum
+from parse_alarms import Field, DataType
+
+MAX_DATA_ADDRESS = (1 << 10) - 1
 
 
 @dataclass
@@ -13,18 +14,22 @@ class Table:
 
 @dataclass
 class AddCommand:
-    address: int
     data: int
-    label: str | None
-    index: int
+    num_bytes: int
+
+
+@dataclass
+class AddSchemaCommand:
+    data: int
+    label: str
 
 
 @dataclass
 class DeleteCommand:
-    index: int
+    address: int
 
 
-Command = AddCommand | DeleteCommand
+Command = AddCommand | DeleteCommand | AddSchemaCommand
 
 
 class EngineResult(NamedTuple):
@@ -44,7 +49,7 @@ class NyQLEngine:
             case nq.DeleteStmt():
                 return EngineResult(commands=[])
             case nq.InsertStmt():
-                return EngineResult(commands=[])
+                return EngineResult(commands=self.run_insert_statement(statement))
             case nq.UpdateStmt():
                 return EngineResult(commands=[])
             case nq.GetSchemaStmt():
@@ -148,6 +153,64 @@ class NyQLEngine:
                         raise ValueError(f"Unsupported operator in WHERE: {op}")
             case _:
                 raise ValueError(f"Expected a condition, got: {type(expr)}")
+
+    def run_insert_statement(self, statement: nq.InsertStmt) -> list[Command]:
+        num_bytes = sum(field.length_bytes for field in self.schema)
+        commands: list[Command] = []
+        for row in statement.rows:
+            if len(row) != len(self.schema):
+                raise ValueError(f"Expected {len(self.schema)} values, got {len(row)}")
+            data = 0
+            for field, literal in zip(self.schema, row):
+                encoded = self._encode_value(literal.value, field)
+                data = (data << (field.length_bytes * 8)) | encoded
+            commands.append(AddCommand(data=data, num_bytes=num_bytes))
+        return commands
+
+    def _encode_value(self, value: str | int | float, field: Field) -> int:
+        max_bits = field.length_bytes * 8
+        match field.datatype:
+            case DataType.TEXT:
+                if not isinstance(value, str):
+                    raise TypeError(
+                        f"{field.name}: expected TEXT, got {type(value).__name__}"
+                    )
+                encoded = value.encode("utf-8")
+                if len(encoded) > field.length_bytes:
+                    raise ValueError(
+                        f"{field.name}: value '{value}' is {len(encoded)} bytes, max {field.length_bytes}"
+                    )
+                padded = encoded.ljust(field.length_bytes, b"\x00")
+                return int.from_bytes(padded, "big")
+            case DataType.UINT | DataType.TIMESTAMP:
+                if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+                    raise TypeError(
+                        f"{field.name}: expected non-negative int, got {value!r}"
+                    )
+                if value >= (1 << max_bits):
+                    raise ValueError(
+                        f"{field.name}: value {value} exceeds {field.length_bytes} bytes"
+                    )
+                return value
+            case DataType.INT:
+                if not isinstance(value, int) or isinstance(value, bool):
+                    raise TypeError(
+                        f"{field.name}: expected int, got {type(value).__name__}"
+                    )
+                lo, hi = -(1 << (max_bits - 1)), (1 << (max_bits - 1)) - 1
+                if not lo <= value <= hi:
+                    raise ValueError(
+                        f"{field.name}: value {value} out of range [{lo}, {hi}]"
+                    )
+                return value & ((1 << max_bits) - 1)  # two's complement
+            case DataType.BOOL:
+                if not isinstance(value, (bool, int)) or value not in (0, 1):
+                    raise TypeError(
+                        f"{field.name}: expected BOOL (0 or 1), got {value!r}"
+                    )
+                return int(value)
+            case _:
+                raise ValueError(f"{field.name}: unsupported datatype {field.datatype}")
 
     def _run_get_schema_statement(self):
         cols = ["col_name", "type", "length_bytes"]

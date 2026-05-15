@@ -2,7 +2,7 @@ import sys
 import io
 import csv
 from parse_alarms import parse_serialized_alarms
-from serialize_commands import serialize_commands
+from commands_to_instructions import convert_commands_to_instructions
 from nyql.grammar import parse_nyql
 from nyql.engine import NyQLEngine, Table
 from nyql.nyql_ast import NyQLTransformer
@@ -33,7 +33,7 @@ def table_to_csv(table: Table) -> str:
 def main():
     inputs = sys.stdin.read()
     serialized_alarms, raw_nyql = inputs.split("%%BEGIN_NYQL%%")
-    records, schema = parse_serialized_alarms(serialized_alarms)
+    bytes, records, schema = parse_serialized_alarms(serialized_alarms)
     nyql_ast = None
     try:
         nyql_tree = parse_nyql(raw_nyql)
@@ -48,7 +48,8 @@ def main():
     try:
         result = engine.run_nyql_statement(nyql_ast)
         if result.commands is not None:
-            run(serialize_commands(result.commands))
+            instructions = convert_commands_to_instructions(result.commands, bytes)
+            run("\n".join(instructions))
         elif result.table is not None:
             display(table_to_csv(result.table))
     except Exception as e:
