@@ -31,7 +31,7 @@ class NyQLEngine:
             case nq.UpdateStmt():
                 return EngineResult(commands=[])
             case nq.GetSchemaStmt():
-                return EngineResult(commands=[])
+                return EngineResult(table=self._run_get_schema_statement())
             case nq.SetSchemaStmt():
                 return EngineResult(commands=[])
             case _:
@@ -44,7 +44,7 @@ class NyQLEngine:
         if statement.order_by is not None:
             records = self._sort_records(records, statement.order_by)
         if statement.limit is not None:
-            records = records[:statement.limit]
+            records = records[: statement.limit]
         if statement.cols is None:
             col_names = [field.name for field in self.schema]
             rows = [[r.get(col) for col in col_names] for r in records]
@@ -56,7 +56,9 @@ class NyQLEngine:
         ]
         return Table(cols=display_names, rows=rows)
 
-    def _sort_records(self, records: list[dict], order_by: list[nq.OrderByCol]) -> list[dict]:
+    def _sort_records(
+        self, records: list[dict], order_by: list[nq.OrderByCol]
+    ) -> list[dict]:
         for col in reversed(order_by):
             records = sorted(
                 records,
@@ -129,3 +131,11 @@ class NyQLEngine:
                         raise ValueError(f"Unsupported operator in WHERE: {op}")
             case _:
                 raise ValueError(f"Expected a condition, got: {type(expr)}")
+
+    def _run_get_schema_statement(self):
+        cols = ["col_name", "type", "length_bytes"]
+        rows = [
+            [field.name, field.datatype.name, field.length_bytes]
+            for field in self.schema
+        ]
+        return Table(cols=cols, rows=rows)
