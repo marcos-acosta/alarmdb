@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from typing import Any, NamedTuple
 from nyql import nyql_ast as nq
 from parse_alarms import Field
+from enum import Enum
 
 
 @dataclass
@@ -10,9 +11,25 @@ class Table:
     rows: list[list]
 
 
+@dataclass
+class AddCommand:
+    address: int
+    data: int
+    label: str | None
+    index: int
+
+
+@dataclass
+class DeleteCommand:
+    index: int
+
+
+Command = AddCommand | DeleteCommand
+
+
 class EngineResult(NamedTuple):
     table: Table | None = None
-    commands: list[str] | None = None
+    commands: list[Command] | None = None
 
 
 class NyQLEngine:

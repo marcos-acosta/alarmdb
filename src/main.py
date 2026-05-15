@@ -2,6 +2,7 @@ import sys
 import io
 import csv
 from parse_alarms import parse_serialized_alarms
+from serialize_commands import serialize_commands
 from nyql.grammar import parse_nyql
 from nyql.engine import NyQLEngine, Table
 from nyql.nyql_ast import NyQLTransformer
@@ -13,9 +14,8 @@ def display(data: str):
     print(f"DISPLAY\n{data}")
 
 
-def run(commands: list[str]):
-    nl_commands = "\n".join(commands)
-    print(f"RUN\n{nl_commands}")
+def run(commands: str):
+    print(f"RUN\n{commands}")
 
 
 def error(error_message: str):
@@ -48,7 +48,7 @@ def main():
     try:
         result = engine.run_nyql_statement(nyql_ast)
         if result.commands is not None:
-            run(result.commands)
+            run(serialize_commands(result.commands))
         elif result.table is not None:
             display(table_to_csv(result.table))
     except Exception as e:
