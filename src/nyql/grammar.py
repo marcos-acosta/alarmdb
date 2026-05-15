@@ -64,7 +64,9 @@ grammar = r"""
             | "(" expr ")"
 
     !comp_op: ">" | ">=" | "<" | "<=" | "=" | "!="
-    literal: ESCAPED_STRING | INT | FLOAT
+    literal: ESCAPED_STRING | INT | FLOAT | TRUE | FALSE
+    TRUE:  "TRUE"
+    FALSE: "FALSE"
 
     NAME: /[a-zA-Z_]\w*/
 

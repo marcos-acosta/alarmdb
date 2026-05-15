@@ -23,7 +23,7 @@ class BinOp:
 
 @dataclass
 class Literal:
-    value: str | int | float
+    value: str | int | float | bool
 
 Expr = ColRef | FuncCall | BinOp | Literal
 
@@ -100,12 +100,19 @@ class NyQLTransformer(Transformer):
 
     def literal(self, args):
         token = args[0]
-        if token.type == "ESCAPED_STRING":
-            return Literal(str(token)[1:-1])  # strip quotes
-        elif token.type == "INT":
-            return Literal(int(token))
-        else:
-            return Literal(float(token))
+        match token.type:
+            case "ESCAPED_STRING":
+                return Literal(str(token)[1:-1])  # strip quotes
+            case "INT":
+                return Literal(int(token))
+            case "FLOAT":
+                return Literal(float(token))
+            case "TRUE":
+                return Literal(True)
+            case "FALSE":
+                return Literal(False)
+            case _:
+                raise ValueError(f"Unknown literal type: {token.type}")
 
     def comp_op(self, args):
         return str(args[0])

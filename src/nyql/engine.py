@@ -61,10 +61,15 @@ class NyQLEngine:
 
     def run_select_statement(self, statement: nq.SelectStmt) -> Table:
         records = self.records
+        alias_map: dict[str, nq.Expr] = (
+            {col.alias: col.expr for col in statement.cols if col.alias}
+            if statement.cols is not None
+            else {}
+        )
         if statement.where is not None:
             records = [r for r in records if self._eval_condition(statement.where, r)]
         if statement.order_by is not None:
-            records = self._sort_records(records, statement.order_by)
+            records = self._sort_records(records, statement.order_by, alias_map)
         if statement.limit is not None:
             records = records[: statement.limit]
         if statement.cols is None:
@@ -79,12 +84,20 @@ class NyQLEngine:
         return Table(cols=display_names, rows=rows)
 
     def _sort_records(
-        self, records: list[dict], order_by: list[nq.OrderByCol]
+        self,
+        records: list[dict],
+        order_by: list[nq.OrderByCol],
+        alias_map: dict[str, nq.Expr],
     ) -> list[dict]:
+        def resolve(name: str, record: dict):
+            if name in alias_map:
+                return self._eval_expr(alias_map[name], record)
+            return record.get(name)
+
         for col in reversed(order_by):
             records = sorted(
                 records,
-                key=lambda r: (r.get(col.name) is None, r.get(col.name)),
+                key=lambda r, c=col: (resolve(c.name, r) is None, resolve(c.name, r)),
                 reverse=not col.ascending,
             )
         return records
@@ -125,6 +138,8 @@ class NyQLEngine:
 
     def _eval_condition(self, expr: nq.Expr, record: dict) -> bool:
         match expr:
+            case nq.Literal() | nq.ColRef():
+                return bool(self._eval_expr(expr, record))
             case nq.BinOp(op="AND", left=left, right=right):
                 return self._eval_condition(left, record) and self._eval_condition(
                     right, record
@@ -209,8 +224,6 @@ class NyQLEngine:
                         f"{field.name}: expected BOOL (0 or 1), got {value!r}"
                     )
                 return int(value)
-            case _:
-                raise ValueError(f"{field.name}: unsupported datatype {field.datatype}")
 
     def _run_get_schema_statement(self):
         cols = ["col_name", "type", "length_bytes"]
