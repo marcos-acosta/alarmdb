@@ -1,10 +1,10 @@
 import sys
 import io
 import csv
-from parse_alarms import parse_serialized_alarms
-from commands_to_instructions import convert_commands_to_instructions
+from alarm_layer import parse_serialized_alarms, convert_commands_to_instructions
 from nyql.grammar import parse_nyql
-from nyql.engine import NyQLEngine, Table
+from nyql.engine import NyQLEngine
+from interface import Table
 from nyql.nyql_ast import NyQLTransformer
 
 ERROR_CHAR_LIMIT = 1000
@@ -49,7 +49,7 @@ def main():
         result = engine.run_nyql_statement(nyql_ast)
         if result.commands is not None:
             instructions = convert_commands_to_instructions(result.commands, bytes)
-            run("\n".join(instructions))
+            run(instructions)
         elif result.table is not None:
             display(table_to_csv(result.table))
     except Exception as e:

@@ -1,35 +1,9 @@
-from dataclasses import dataclass
 from typing import Any, NamedTuple
 from nyql import nyql_ast as nq
-from parse_alarms import Field, DataType
+from alarm_layer import Field, DataType
+from interface import AddCommand, AddSchemaCommand, DeleteCommand, Command, Table
 
 MAX_DATA_ADDRESS = (1 << 10) - 1
-
-
-@dataclass
-class Table:
-    cols: list[str]
-    rows: list[list]
-
-
-@dataclass
-class AddCommand:
-    data: int
-    num_bytes: int
-
-
-@dataclass
-class AddSchemaCommand:
-    data: int
-    label: str
-
-
-@dataclass
-class DeleteCommand:
-    address: int
-
-
-Command = AddCommand | DeleteCommand | AddSchemaCommand
 
 
 class EngineResult(NamedTuple):
