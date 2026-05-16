@@ -25,7 +25,7 @@ class NyQLEngine:
             case nq.InsertStmt():
                 return EngineResult(commands=self.run_insert_statement(statement))
             case nq.UpdateStmt():
-                return EngineResult(commands=[])
+                return EngineResult(commands=self.run_update_statement(statement))
             case nq.GetSchemaStmt():
                 return EngineResult(table=self._run_get_schema_statement())
             case nq.SetSchemaStmt():
@@ -46,7 +46,9 @@ class NyQLEngine:
         if group_by_names is None and self._needs_implicit_grouping(statement):
             group_by_names = []
         if group_by_names is not None:
-            return self._run_grouped_select(statement, records, alias_map, group_by_names)
+            return self._run_grouped_select(
+                statement, records, alias_map, group_by_names
+            )
         if statement.order_by is not None:
             records = self._sort_records(records, statement.order_by, alias_map)
         if statement.limit is not None:
@@ -107,12 +109,12 @@ class NyQLEngine:
 
         if statement.order_by is not None:
             for col in reversed(statement.order_by):
-                order_expr = self._resolve_aliases(
-                    nq.ColRef(name=col.name), alias_map
-                )
+                order_expr = self._resolve_aliases(nq.ColRef(name=col.name), alias_map)
+
                 def key_fn(item, e=order_expr):
                     v = self._eval_grouped_expr(e, item[0], item[1], group_exprs)
                     return (v is None, v)
+
                 items = sorted(items, key=key_fn, reverse=not col.ascending)
 
         if statement.limit is not None:
@@ -194,7 +196,14 @@ class NyQLEngine:
                 ) or self._eval_grouped_condition(
                     r, group_key, group_records, group_exprs
                 )
-            case nq.BinOp(op=op, left=l, right=r) if op in (">", ">=", "<", "<=", "=", "!="):
+            case nq.BinOp(op=op, left=l, right=r) if op in (
+                ">",
+                ">=",
+                "<",
+                "<=",
+                "=",
+                "!=",
+            ):
                 lv = self._eval_grouped_expr(l, group_key, group_records, group_exprs)
                 rv = self._eval_grouped_expr(r, group_key, group_records, group_exprs)
                 return self._apply_comp(op, lv, rv)
@@ -224,21 +233,33 @@ class NyQLEngine:
         if not isinstance(lv, (int, float)) or not isinstance(rv, (int, float)):
             raise TypeError(f"Arithmetic on non-numeric values: {lv!r} {op} {rv!r}")
         match op:
-            case "+": return lv + rv
-            case "-": return lv - rv
-            case "*": return lv * rv
-            case "/": return lv / rv
-            case _: raise ValueError(f"Unsupported arithmetic operator: {op}")
+            case "+":
+                return lv + rv
+            case "-":
+                return lv - rv
+            case "*":
+                return lv * rv
+            case "/":
+                return lv / rv
+            case _:
+                raise ValueError(f"Unsupported arithmetic operator: {op}")
 
     def _apply_comp(self, op: str, lv: Any, rv: Any) -> bool:
         match op:
-            case ">":  return lv > rv
-            case ">=": return lv >= rv
-            case "<":  return lv < rv
-            case "<=": return lv <= rv
-            case "=":  return lv == rv
-            case "!=": return lv != rv
-            case _: raise ValueError(f"Unsupported comparison operator: {op}")
+            case ">":
+                return lv > rv
+            case ">=":
+                return lv >= rv
+            case "<":
+                return lv < rv
+            case "<=":
+                return lv <= rv
+            case "=":
+                return lv == rv
+            case "!=":
+                return lv != rv
+            case _:
+                raise ValueError(f"Unsupported comparison operator: {op}")
 
     def _sort_records(
         self,
@@ -333,6 +354,34 @@ class NyQLEngine:
             if self._eval_condition(statement.where, record)
         ]
 
+    def run_update_statement(self, statement: nq.UpdateStmt) -> list[Command]:
+        schema_names = {field.name for field in self.schema}
+        for a in statement.assignments:
+            if a.col not in schema_names:
+                raise ValueError(f"Unknown column in UPDATE: {a.col}")
+
+        overrides = {a.col: a.value.value for a in statement.assignments}
+        num_bytes = sum(field.length_bytes for field in self.schema)
+        commands: list[Command] = []
+
+        for record in self.records:
+            if statement.where is not None and not self._eval_condition(
+                statement.where, record
+            ):
+                continue
+            data = 0
+            for field in self.schema:
+                if field.name in overrides:
+                    value = overrides[field.name]
+                else:
+                    value = record[field.name]
+                encoded = self._encode_value(value, field)
+                data = (data << (field.length_bytes * 8)) | encoded
+            commands.append(DeleteCommand(address=record[PK_FIELD_NAME]))
+            commands.append(AddCommand(data=data, num_bytes=num_bytes))
+
+        return commands
+
     def run_insert_statement(self, statement: nq.InsertStmt) -> list[Command]:
         num_bytes = sum(field.length_bytes for field in self.schema)
         commands: list[Command] = []
@@ -346,7 +395,7 @@ class NyQLEngine:
             commands.append(AddCommand(data=data, num_bytes=num_bytes))
         return commands
 
-    def _encode_value(self, value: str | int | float, field: Field) -> int:
+    def _encode_value(self, value: str | int | float | bool, field: Field) -> int:
         max_bits = field.length_bytes * 8
         match field.datatype:
             case DataType.TEXT:
