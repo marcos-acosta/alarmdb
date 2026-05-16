@@ -4,6 +4,7 @@ from functools import reduce
 from enum import Enum
 from collections import defaultdict
 from datetime import datetime
+from dataclasses import dataclass
 import copy
 import math
 import bisect
@@ -34,7 +35,8 @@ class DataType(Enum):
     BOOL = 4
 
 
-class Alarm(NamedTuple):
+@dataclass
+class Alarm:
     time: str
     enabled: bool
     snooze: bool
@@ -42,14 +44,16 @@ class Alarm(NamedTuple):
     label: str
 
 
-class AddressedByte(NamedTuple):
+@dataclass
+class AddressedByte:
     address: int
     byte_offset: int
     data: int
     label: str | None = None
 
 
-class Field(NamedTuple):
+@dataclass
+class Field:
     name: str
     datatype: DataType
     length_bytes: int
@@ -57,7 +61,8 @@ class Field(NamedTuple):
     end_offset_bytes: int
 
 
-class Word(NamedTuple):
+@dataclass
+class Word:
     address: int
     bytes: list[AddressedByte]
 
@@ -83,7 +88,7 @@ def is_data_byte(byte: AddressedByte):
     return (byte.address >> 5) == 0
 
 
-def convert_time(t: str):
+def convert_time(t: str) -> str:
     return t.replace("\u202f", " ")
 
 
@@ -393,6 +398,21 @@ def _convert_add_schema_command_to_instructions(
     return wipe_instructions + _create_instructions_from_bytes(mutable_bytes, [byte])
 
 
+def _get_delete_command_for_byte(
+    byte: AddressedByte, mutable_bytes: list[AddressedByte]
+) -> Instruction:
+    index_to_delete = mutable_bytes.index(byte)
+    mutable_bytes.pop(index_to_delete)
+    return _get_delete_instruction(index_to_delete)
+
+
+def _convert_delete_command_to_instruction(
+    d: DeleteCommand, mutable_bytes: list[AddressedByte]
+) -> list[Instruction]:
+    bytes_to_delete = [b for b in mutable_bytes if b.address == d.address]
+    return [_get_delete_command_for_byte(b, mutable_bytes) for b in bytes_to_delete]
+
+
 def _convert_command_to_instructions(
     c: Command, mutable_bytes: list[AddressedByte]
 ) -> list[Instruction]:
@@ -402,7 +422,7 @@ def _convert_command_to_instructions(
         case AddSchemaCommand():
             return _convert_add_schema_command_to_instructions(c, mutable_bytes)
         case DeleteCommand():
-            return []
+            return _convert_delete_command_to_instruction(c, mutable_bytes)
 
 
 def convert_commands_to_instructions(

@@ -1,7 +1,7 @@
 from typing import Any, NamedTuple
 from nyql import nyql_ast as nq
-from alarm_layer import Field, DataType
-from interface import AddCommand, AddSchemaCommand, DeleteCommand, Command, Table
+from alarm_layer import Field, DataType, PK_FIELD_NAME
+from interface import AddCommand, DeleteCommand, Command, Table
 
 MAX_DATA_ADDRESS = (1 << 10) - 1
 
@@ -21,7 +21,7 @@ class NyQLEngine:
             case nq.SelectStmt():
                 return EngineResult(table=self.run_select_statement(statement))
             case nq.DeleteStmt():
-                return EngineResult(commands=[])
+                return EngineResult(commands=self.run_delete_statement(statement))
             case nq.InsertStmt():
                 return EngineResult(commands=self.run_insert_statement(statement))
             case nq.UpdateStmt():
@@ -142,6 +142,13 @@ class NyQLEngine:
                         raise ValueError(f"Unsupported operator in WHERE: {op}")
             case _:
                 raise ValueError(f"Expected a condition, got: {type(expr)}")
+
+    def run_delete_statement(self, statement: nq.DeleteStmt) -> list[Command]:
+        return [
+            DeleteCommand(address=record[PK_FIELD_NAME])
+            for record in self.records
+            if self._eval_condition(statement.where, record)
+        ]
 
     def run_insert_statement(self, statement: nq.InsertStmt) -> list[Command]:
         num_bytes = sum(field.length_bytes for field in self.schema)
