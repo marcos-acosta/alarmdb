@@ -78,7 +78,7 @@ class GetSchemaStmt:
 class SchemaCol:
     name: str
     type: str
-    order: int
+    length_bytes: int
 
 @dataclass
 class SetSchemaStmt:
@@ -212,8 +212,8 @@ class NyQLTransformer(Transformer):
     def schema_col(self, args):
         name = str(args[0])[1:-1]  # strip quotes
         col_type = args[1]
-        order = int(args[2])
-        return SchemaCol(name=name, type=col_type, order=order)
+        length_bytes = int(args[2])
+        return SchemaCol(name=name, type=col_type, length_bytes=length_bytes)
 
     def set_schema_stmt(self, args):
         return SetSchemaStmt(cols=list(args))

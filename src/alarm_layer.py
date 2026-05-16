@@ -378,24 +378,12 @@ def _convert_add_command_to_instructions(
     return _create_instructions_from_bytes(mutable_bytes, bytes)
 
 
-def _get_instructions_to_wipe_db(
-    mutable_bytes: list[AddressedByte],
-) -> list[Instruction]:
-    instructions = []
-    num_bytes = len(mutable_bytes)
-    for _ in range(num_bytes):
-        instructions.append(_get_delete_instruction(0))
-    mutable_bytes = []
-    return instructions
-
-
 def _convert_add_schema_command_to_instructions(
     a: AddSchemaCommand, mutable_bytes: list[AddressedByte]
 ) -> list[Instruction]:
-    wipe_instructions = _get_instructions_to_wipe_db(mutable_bytes)
     abs_offset = _find_next_schema_byte_offset(mutable_bytes)
     byte = AddressedByte(abs_offset >> 5, abs_offset & 31, a.data, a.label)
-    return wipe_instructions + _create_instructions_from_bytes(mutable_bytes, [byte])
+    return _create_instructions_from_bytes(mutable_bytes, [byte])
 
 
 def _get_delete_command_for_byte(
@@ -409,6 +397,10 @@ def _get_delete_command_for_byte(
 def _convert_delete_command_to_instruction(
     d: DeleteCommand, mutable_bytes: list[AddressedByte]
 ) -> list[Instruction]:
+    if d.address is None:
+        if not mutable_bytes:
+            return []
+        return [_get_delete_command_for_byte(mutable_bytes[0], mutable_bytes)]
     bytes_to_delete = [b for b in mutable_bytes if b.address == d.address]
     return [_get_delete_command_for_byte(b, mutable_bytes) for b in bytes_to_delete]
 

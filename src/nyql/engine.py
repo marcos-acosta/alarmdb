@@ -1,7 +1,7 @@
 from typing import Any, NamedTuple
 from nyql import nyql_ast as nq
 from alarm_layer import Field, DataType, PK_FIELD_NAME
-from interface import AddCommand, DeleteCommand, Command, Table
+from interface import AddCommand, AddSchemaCommand, DeleteCommand, Command, Table
 
 MAX_DATA_ADDRESS = (1 << 10) - 1
 
@@ -29,7 +29,7 @@ class NyQLEngine:
             case nq.GetSchemaStmt():
                 return EngineResult(table=self._run_get_schema_statement())
             case nq.SetSchemaStmt():
-                return EngineResult(commands=[])
+                return EngineResult(commands=self.run_set_schema_statement(statement))
             case _:
                 return EngineResult()
 
@@ -437,6 +437,28 @@ class NyQLEngine:
                         f"{field.name}: expected BOOL (0 or 1), got {value!r}"
                     )
                 return int(value)
+
+    def run_set_schema_statement(self, statement: nq.SetSchemaStmt) -> list[Command]:
+        type_map = {
+            "TEXT": DataType.TEXT,
+            "INT": DataType.INT,
+            "UINT": DataType.UINT,
+            "BOOL": DataType.BOOL,
+            "TIMESTAMP": DataType.TIMESTAMP,
+        }
+        bytes_per_record = sum(field.length_bytes for field in self.schema)
+        total_bytes = len(self.records) * bytes_per_record + len(self.schema)
+        commands: list[Command] = [DeleteCommand() for _ in range(total_bytes)]
+        for col in statement.cols:
+            if col.type not in type_map:
+                raise ValueError(f"Unsupported column type in SET SCHEMA: {col.type}")
+            if not 1 <= col.length_bytes <= 32:
+                raise ValueError(
+                    f"length_bytes for {col.name} must be 1-32, got {col.length_bytes}"
+                )
+            data = (type_map[col.type].value << 5) | (col.length_bytes - 1)
+            commands.append(AddSchemaCommand(data=data, label=col.name))
+        return commands
 
     def _run_get_schema_statement(self):
         cols = ["col_name", "type", "length_bytes"]

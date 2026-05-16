@@ -15,7 +15,7 @@ class AddSchemaCommand:
 
 @dataclass
 class DeleteCommand:
-    address: int
+    address: int | None = None  # None = delete the first remaining byte
 
 
 type Command = AddCommand | DeleteCommand | AddSchemaCommand

@@ -1,6 +1,6 @@
 import pytest
 from alarm_layer import Field, DataType
-from interface import AddCommand, DeleteCommand
+from interface import AddCommand, AddSchemaCommand, DeleteCommand
 from nyql.grammar import parse_nyql
 from nyql.nyql_ast import NyQLTransformer
 from nyql.engine import NyQLEngine
@@ -187,3 +187,48 @@ def test_update_preserves_unmentioned_fields(records, schema):
 def test_update_unknown_column_raises(records, schema):
     with pytest.raises(ValueError, match="Unknown column"):
         run('UPDATE SET nonexistent = 1 WHERE TRUE;', records, schema)
+
+
+# ---------------- SET SCHEMA ----------------
+
+
+def test_set_schema_emits_one_add_per_col(records, schema):
+    res = run('SET SCHEMA ("name", TEXT, 6), ("age", INT, 1);', records, schema)
+    adds = [c for c in res.commands if isinstance(c, AddSchemaCommand)]
+    assert len(adds) == 2
+    assert adds[0].label == "name"
+    assert adds[1].label == "age"
+
+
+def test_set_schema_encodes_type_and_length(records, schema):
+    res = run('SET SCHEMA ("name", TEXT, 6), ("age", INT, 1);', records, schema)
+    adds = [c for c in res.commands if isinstance(c, AddSchemaCommand)]
+    # TEXT = 0, length 6 → (0 << 5) | (6-1) = 5
+    assert adds[0].data == 5
+    # INT = 2, length 1 → (2 << 5) | (1-1) = 64
+    assert adds[1].data == 64
+
+
+def test_set_schema_invalid_length_raises(records, schema):
+    with pytest.raises(ValueError, match="must be 1-32"):
+        run('SET SCHEMA ("name", TEXT, 0);', records, schema)
+    with pytest.raises(ValueError, match="must be 1-32"):
+        run('SET SCHEMA ("name", TEXT, 33);', records, schema)
+
+
+def test_set_schema_prepends_wipe_deletes(records, schema):
+    # 4 records * (6 + 1) bytes per record + 2 schema bytes = 30 total
+    res = run('SET SCHEMA ("name", TEXT, 6), ("age", INT, 1);', records, schema)
+    deletes = [c for c in res.commands if isinstance(c, DeleteCommand)]
+    adds = [c for c in res.commands if isinstance(c, AddSchemaCommand)]
+    assert len(deletes) == 30
+    assert all(d.address is None for d in deletes)
+    assert len(adds) == 2
+    # Deletes come before adds
+    assert all(isinstance(c, DeleteCommand) for c in res.commands[:30])
+
+
+def test_set_schema_with_empty_db_emits_no_deletes():
+    res = run('SET SCHEMA ("x", INT, 1);', [], [])
+    assert all(not isinstance(c, DeleteCommand) for c in res.commands)
+    assert len(res.commands) == 1
