@@ -42,6 +42,11 @@ class NyQLEngine:
         )
         if statement.where is not None:
             records = [r for r in records if self._eval_condition(statement.where, r)]
+        group_by_names = statement.group_by
+        if group_by_names is None and self._needs_implicit_grouping(statement):
+            group_by_names = []
+        if group_by_names is not None:
+            return self._run_grouped_select(statement, records, alias_map, group_by_names)
         if statement.order_by is not None:
             records = self._sort_records(records, statement.order_by, alias_map)
         if statement.limit is not None:
@@ -56,6 +61,184 @@ class NyQLEngine:
             for record in records
         ]
         return Table(cols=display_names, rows=rows)
+
+    def _needs_implicit_grouping(self, statement: nq.SelectStmt) -> bool:
+        if statement.having is not None:
+            return True
+        if statement.cols is None:
+            return False
+        return any(self._has_aggregate(col.expr) for col in statement.cols)
+
+    def _has_aggregate(self, expr: nq.Expr) -> bool:
+        match expr:
+            case nq.FuncCall():
+                return True
+            case nq.BinOp(left=l, right=r):
+                return self._has_aggregate(l) or self._has_aggregate(r)
+            case _:
+                return False
+
+    def _run_grouped_select(
+        self,
+        statement: nq.SelectStmt,
+        records: list[dict],
+        alias_map: dict[str, nq.Expr],
+        group_by_names: list[str],
+    ) -> Table:
+        group_exprs = [
+            self._resolve_aliases(nq.ColRef(name=name), alias_map)
+            for name in group_by_names
+        ]
+
+        groups: dict[tuple, list[dict]] = {}
+        for r in records:
+            key = tuple(self._eval_expr(e, r) for e in group_exprs)
+            groups.setdefault(key, []).append(r)
+
+        items = list(groups.items())
+
+        if statement.having is not None:
+            having_expr = self._resolve_aliases(statement.having, alias_map)
+            items = [
+                (k, gr)
+                for k, gr in items
+                if self._eval_grouped_condition(having_expr, k, gr, group_exprs)
+            ]
+
+        if statement.order_by is not None:
+            for col in reversed(statement.order_by):
+                order_expr = self._resolve_aliases(
+                    nq.ColRef(name=col.name), alias_map
+                )
+                def key_fn(item, e=order_expr):
+                    v = self._eval_grouped_expr(e, item[0], item[1], group_exprs)
+                    return (v is None, v)
+                items = sorted(items, key=key_fn, reverse=not col.ascending)
+
+        if statement.limit is not None:
+            items = items[: statement.limit]
+
+        if statement.cols is None:
+            return Table(cols=list(group_by_names), rows=[list(k) for k, _ in items])
+
+        display_names = [self._display_name(col) for col in statement.cols]
+        rows = [
+            [
+                self._eval_grouped_expr(
+                    self._resolve_aliases(col.expr, alias_map), k, gr, group_exprs
+                )
+                for col in statement.cols
+            ]
+            for k, gr in items
+        ]
+        return Table(cols=display_names, rows=rows)
+
+    def _resolve_aliases(self, expr: nq.Expr, alias_map: dict[str, nq.Expr]) -> nq.Expr:
+        match expr:
+            case nq.ColRef(name=n) if n in alias_map:
+                return self._resolve_aliases(alias_map[n], alias_map)
+            case nq.BinOp(op=op, left=l, right=r):
+                return nq.BinOp(
+                    op=op,
+                    left=self._resolve_aliases(l, alias_map),
+                    right=self._resolve_aliases(r, alias_map),
+                )
+            case nq.FuncCall(name=name, arg=arg):
+                return nq.FuncCall(name=name, arg=self._resolve_aliases(arg, alias_map))
+            case _:
+                return expr
+
+    def _eval_grouped_expr(
+        self,
+        expr: nq.Expr,
+        group_key: tuple,
+        group_records: list[dict],
+        group_exprs: list[nq.Expr],
+    ) -> Any:
+        for i, ge in enumerate(group_exprs):
+            if expr == ge:
+                return group_key[i]
+        match expr:
+            case nq.Literal(value=v):
+                return v
+            case nq.FuncCall(name=name, arg=arg):
+                return self._eval_aggregate(name, arg, group_records)
+            case nq.ColRef(name=n):
+                raise ValueError(
+                    f"Column '{n}' must appear in GROUP BY or be inside an aggregate"
+                )
+            case nq.BinOp(op=op, left=l, right=r):
+                lv = self._eval_grouped_expr(l, group_key, group_records, group_exprs)
+                rv = self._eval_grouped_expr(r, group_key, group_records, group_exprs)
+                return self._apply_arith(op, lv, rv)
+            case _:
+                raise ValueError(f"Unsupported expression type: {type(expr)}")
+
+    def _eval_grouped_condition(
+        self,
+        expr: nq.Expr,
+        group_key: tuple,
+        group_records: list[dict],
+        group_exprs: list[nq.Expr],
+    ) -> bool:
+        match expr:
+            case nq.BinOp(op="AND", left=l, right=r):
+                return self._eval_grouped_condition(
+                    l, group_key, group_records, group_exprs
+                ) and self._eval_grouped_condition(
+                    r, group_key, group_records, group_exprs
+                )
+            case nq.BinOp(op="OR", left=l, right=r):
+                return self._eval_grouped_condition(
+                    l, group_key, group_records, group_exprs
+                ) or self._eval_grouped_condition(
+                    r, group_key, group_records, group_exprs
+                )
+            case nq.BinOp(op=op, left=l, right=r) if op in (">", ">=", "<", "<=", "=", "!="):
+                lv = self._eval_grouped_expr(l, group_key, group_records, group_exprs)
+                rv = self._eval_grouped_expr(r, group_key, group_records, group_exprs)
+                return self._apply_comp(op, lv, rv)
+            case _:
+                return bool(
+                    self._eval_grouped_expr(expr, group_key, group_records, group_exprs)
+                )
+
+    def _eval_aggregate(self, name: str, arg: nq.Expr, records: list[dict]) -> Any:
+        values = [self._eval_expr(arg, r) for r in records]
+        non_null = [v for v in values if v is not None]
+        match name.upper():
+            case "SUM":
+                return sum(non_null)
+            case "COUNT":
+                return len(non_null)
+            case "MIN":
+                return min(non_null) if non_null else None
+            case "MAX":
+                return max(non_null) if non_null else None
+            case "AVG":
+                return sum(non_null) / len(non_null) if non_null else None
+            case _:
+                raise ValueError(f"Unknown aggregate function: {name}")
+
+    def _apply_arith(self, op: str, lv: Any, rv: Any) -> Any:
+        if not isinstance(lv, (int, float)) or not isinstance(rv, (int, float)):
+            raise TypeError(f"Arithmetic on non-numeric values: {lv!r} {op} {rv!r}")
+        match op:
+            case "+": return lv + rv
+            case "-": return lv - rv
+            case "*": return lv * rv
+            case "/": return lv / rv
+            case _: raise ValueError(f"Unsupported arithmetic operator: {op}")
+
+    def _apply_comp(self, op: str, lv: Any, rv: Any) -> bool:
+        match op:
+            case ">":  return lv > rv
+            case ">=": return lv >= rv
+            case "<":  return lv < rv
+            case "<=": return lv <= rv
+            case "=":  return lv == rv
+            case "!=": return lv != rv
+            case _: raise ValueError(f"Unsupported comparison operator: {op}")
 
     def _sort_records(
         self,
