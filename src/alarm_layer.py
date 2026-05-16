@@ -375,7 +375,8 @@ def _convert_add_command_to_instructions(
 ) -> list[Instruction]:
     address = _find_next_data_address(mutable_bytes)
     bytes = _convert_add_command_to_addressed_bytes(a, address)
-    return _create_instructions_from_bytes(mutable_bytes, bytes)
+    nonzero_bytes = [b for b in bytes if b.data != 0]
+    return _create_instructions_from_bytes(mutable_bytes, nonzero_bytes)
 
 
 def _convert_add_schema_command_to_instructions(
