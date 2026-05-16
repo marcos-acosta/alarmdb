@@ -114,6 +114,18 @@ class NyQLTransformer(Transformer):
             case _:
                 raise ValueError(f"Unknown literal type: {token.type}")
 
+    def neg_literal(self, args):
+        lit = args[0]
+        if not isinstance(lit.value, (int, float)) or isinstance(lit.value, bool):
+            raise ValueError(f"Cannot negate non-numeric literal: {lit.value!r}")
+        return Literal(-lit.value)
+
+    def neg(self, args):
+        inner = args[0]
+        if isinstance(inner, Literal) and isinstance(inner.value, (int, float)) and not isinstance(inner.value, bool):
+            return Literal(-inner.value)
+        return BinOp(left=Literal(0), op="-", right=inner)
+
     def comp_op(self, args):
         return str(args[0])
 

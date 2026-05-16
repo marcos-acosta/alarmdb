@@ -26,10 +26,13 @@ grammar = r"""
     delete_stmt: "DELETE" "WHERE" expr
 
     insert_stmt: "INSERT" "VALUES" value_row ("," value_row)*
-    value_row:   "(" literal ("," literal)* ")"
+    value_row:   "(" signed_literal ("," signed_literal)* ")"
 
     update_stmt: "UPDATE" "SET" assignment ("," assignment)* ("WHERE" expr)?
-    assignment:  NAME "=" literal
+    assignment:  NAME "=" signed_literal
+
+    ?signed_literal: literal
+                   | "-" literal -> neg_literal
 
     get_schema_stmt: "GET" "SCHEMA"
     set_schema_stmt: "SET" "SCHEMA" schema_col ("," schema_col)*
@@ -62,6 +65,7 @@ grammar = r"""
             | NAME               -> col_ref
             | literal
             | "(" expr ")"
+            | "-" factor         -> neg
 
     !comp_op: ">" | ">=" | "<" | "<=" | "=" | "!="
     literal: ESCAPED_STRING | INT | FLOAT | TRUE | FALSE
