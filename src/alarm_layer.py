@@ -32,7 +32,7 @@ class DataType(Enum):
     UINT = 1
     INT = 2
     TIMESTAMP = 3
-    BOOL = 4
+    BOOLEAN = 4
 
 
 @dataclass
@@ -210,10 +210,6 @@ def read_bytes_as_signed_int(bytes: list[AddressedByte]) -> int:
     return -(uint ^ ((1 << total_num_bits) - 1)) - 1 if is_negative else uint
 
 
-def read_bytes_as_timestamp(bytes: list[AddressedByte]) -> datetime:
-    return datetime.fromtimestamp(read_bytes_as_uint(bytes))
-
-
 def read_bytes_as_boolean(bytes: list[AddressedByte]) -> bool:
     return read_bytes_as_uint(bytes) > 0
 
@@ -233,8 +229,8 @@ def read_word_with_schema(word: Word, schema: list[Field]):
             case DataType.INT:
                 row[field.name] = read_bytes_as_signed_int(bytes)
             case DataType.TIMESTAMP:
-                row[field.name] = read_bytes_as_timestamp(bytes)
-            case DataType.BOOL:
+                row[field.name] = read_bytes_as_uint(bytes)
+            case DataType.BOOLEAN:
                 row[field.name] = read_bytes_as_boolean(bytes)
             case _:
                 pass

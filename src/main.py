@@ -1,7 +1,13 @@
 import sys
 import io
 import csv
-from alarm_layer import parse_serialized_alarms, convert_commands_to_instructions
+from datetime import datetime
+from alarm_layer import (
+    parse_serialized_alarms,
+    convert_commands_to_instructions,
+    DataType,
+    Field,
+)
 from nyql.grammar import parse_nyql
 from nyql.engine import NyQLEngine
 from interface import Table
@@ -22,11 +28,23 @@ def error(error_message: str):
     display(f"ERROR: {error_message[:ERROR_CHAR_LIMIT]}")
 
 
-def table_to_csv(table: Table) -> str:
+def format_value(value, datatype: DataType | None):
+    if value is None:
+        return ""
+    if datatype == DataType.TIMESTAMP and isinstance(value, int):
+        return datetime.fromtimestamp(value).isoformat()
+    return value
+
+
+def table_to_csv(table: Table, schema: list[Field]) -> str:
+    type_by_col = {f.name: f.datatype for f in schema}
     buf = io.StringIO()
     writer = csv.writer(buf)
     writer.writerow(table.cols)
-    writer.writerows(table.rows)
+    for row in table.rows:
+        writer.writerow(
+            format_value(v, type_by_col.get(col)) for v, col in zip(row, table.cols)
+        )
     return buf.getvalue()
 
 
@@ -51,7 +69,7 @@ def main():
             instructions = convert_commands_to_instructions(result.commands, bytes)
             run(instructions)
         elif result.table is not None:
-            display(table_to_csv(result.table))
+            display(table_to_csv(result.table, schema))
     except Exception as e:
         error(str(e))
 

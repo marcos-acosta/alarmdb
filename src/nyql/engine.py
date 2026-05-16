@@ -431,10 +431,10 @@ class NyQLEngine:
                         f"{field.name}: value {value} out of range [{lo}, {hi}]"
                     )
                 return value & ((1 << max_bits) - 1)  # two's complement
-            case DataType.BOOL:
+            case DataType.BOOLEAN:
                 if not isinstance(value, (bool, int)) or value not in (0, 1):
                     raise TypeError(
-                        f"{field.name}: expected BOOL (0 or 1), got {value!r}"
+                        f"{field.name}: expected BOOLEAN (0 or 1), got {value!r}"
                     )
                 return int(value)
 
@@ -443,7 +443,7 @@ class NyQLEngine:
             "TEXT": DataType.TEXT,
             "INT": DataType.INT,
             "UINT": DataType.UINT,
-            "BOOL": DataType.BOOL,
+            "BOOLEAN": DataType.BOOLEAN,
             "TIMESTAMP": DataType.TIMESTAMP,
         }
         bytes_per_record = sum(field.length_bytes for field in self.schema)
