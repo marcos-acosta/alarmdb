@@ -37,7 +37,7 @@ grammar = r"""
     get_schema_stmt: "GET" "SCHEMA"
     set_schema_stmt: "SET" "SCHEMA" schema_col ("," schema_col)*
     schema_col:      "(" ESCAPED_STRING "," col_type "," INT ")"
-    !col_type:       "TEXT" | "INT" | "UINT" | "BOOLEAN" | "TIMESTAMP"
+    !col_type:       "TEXT" | "INT" | "UINT" | "BOOLEAN" | "TIMESTAMP" | "FLOAT"
 
     name_list: NAME ("," NAME)*
 

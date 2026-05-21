@@ -2,16 +2,16 @@ import sys
 import io
 import csv
 from datetime import datetime
-from alarm_layer import (
+from alarmdb.alarm_layer import (
     parse_serialized_alarms,
     convert_commands_to_instructions,
     DataType,
     Field,
 )
-from nyql.grammar import parse_nyql
-from nyql.engine import NyQLEngine
-from interface import Table
-from nyql.nyql_ast import NyQLTransformer
+from alarmdb.nyql.grammar import parse_nyql
+from alarmdb.nyql.engine import NyQLEngine
+from alarmdb.interface import Table
+from alarmdb.nyql.nyql_ast import NyQLTransformer
 
 ERROR_CHAR_LIMIT = 1000
 

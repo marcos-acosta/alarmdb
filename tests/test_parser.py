@@ -1,6 +1,6 @@
 import pytest
-from nyql.grammar import parse_nyql
-from nyql.nyql_ast import (
+from alarmdb.nyql.grammar import parse_nyql
+from alarmdb.nyql.nyql_ast import (
     NyQLTransformer,
     SelectStmt,
     DeleteStmt,

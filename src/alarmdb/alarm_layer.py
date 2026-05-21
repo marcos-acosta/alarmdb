@@ -1,4 +1,4 @@
-from interface import AddCommand, DeleteCommand, AddSchemaCommand, Command
+from alarmdb.interface import AddCommand, DeleteCommand, AddSchemaCommand, Command
 from typing import Tuple
 from functools import reduce
 from enum import Enum
@@ -7,6 +7,7 @@ from dataclasses import dataclass
 import copy
 import math
 import bisect
+import struct
 
 PK_FIELD_NAME = "_id"
 
@@ -32,6 +33,7 @@ class DataType(Enum):
     INT = 2
     TIMESTAMP = 3
     BOOLEAN = 4
+    FLOAT = 5
 
 
 @dataclass
@@ -213,6 +215,11 @@ def read_bytes_as_boolean(bytes: list[AddressedByte]) -> bool:
     return read_bytes_as_uint(bytes) > 0
 
 
+def read_bytes_as_float(bytes: list[AddressedByte]) -> float:
+    uint = read_bytes_as_uint(bytes)
+    return struct.unpack("<f", struct.pack("<I", uint))[0]
+
+
 def read_word_with_schema(word: Word, schema: list[Field]):
     row = dict()
     row[PK_FIELD_NAME] = word.address
@@ -231,6 +238,8 @@ def read_word_with_schema(word: Word, schema: list[Field]):
                 row[field.name] = read_bytes_as_uint(bytes)
             case DataType.BOOLEAN:
                 row[field.name] = read_bytes_as_boolean(bytes)
+            case DataType.FLOAT:
+                row[field.name] = read_bytes_as_float(bytes)
             case _:
                 pass
     return row

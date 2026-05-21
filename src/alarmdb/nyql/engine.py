@@ -1,7 +1,8 @@
+import struct
 from typing import Any, NamedTuple
-from nyql import nyql_ast as nq
-from alarm_layer import Field, DataType, PK_FIELD_NAME
-from interface import AddCommand, AddSchemaCommand, DeleteCommand, Command, Table
+from alarmdb.nyql import nyql_ast as nq
+from alarmdb.alarm_layer import Field, DataType, PK_FIELD_NAME
+from alarmdb.interface import AddCommand, AddSchemaCommand, DeleteCommand, Command, Table
 
 MAX_DATA_ADDRESS = (1 << 10) - 1
 
@@ -437,6 +438,12 @@ class NyQLEngine:
                         f"{field.name}: expected BOOLEAN (0 or 1), got {value!r}"
                     )
                 return int(value)
+            case DataType.FLOAT:
+                if not isinstance(value, (int, float)) or isinstance(value, bool):
+                    raise TypeError(
+                        f"{field.name}: expected FLOAT, got {type(value).__name__}"
+                    )
+                return struct.unpack("<I", struct.pack("<f", float(value)))[0]
 
     def run_set_schema_statement(self, statement: nq.SetSchemaStmt) -> list[Command]:
         type_map = {
@@ -445,6 +452,7 @@ class NyQLEngine:
             "UINT": DataType.UINT,
             "BOOLEAN": DataType.BOOLEAN,
             "TIMESTAMP": DataType.TIMESTAMP,
+            "FLOAT": DataType.FLOAT,
         }
         bytes_per_record = sum(field.length_bytes for field in self.schema)
         total_bytes = len(self.records) * bytes_per_record + len(self.schema)
@@ -455,6 +463,10 @@ class NyQLEngine:
             if not 1 <= col.length_bytes <= 32:
                 raise ValueError(
                     f"length_bytes for {col.name} must be 1-32, got {col.length_bytes}"
+                )
+            if col.type == "FLOAT" and col.length_bytes != 4:
+                raise ValueError(
+                    f"FLOAT column {col.name} must be 4 bytes, got {col.length_bytes}"
                 )
             data = (type_map[col.type].value << 5) | (col.length_bytes - 1)
             commands.append(AddSchemaCommand(data=data, label=col.name))

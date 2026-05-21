@@ -1,9 +1,10 @@
+import struct
 import pytest
-from alarm_layer import Field, DataType
-from interface import AddCommand, AddSchemaCommand, DeleteCommand
-from nyql.grammar import parse_nyql
-from nyql.nyql_ast import NyQLTransformer
-from nyql.engine import NyQLEngine
+from alarmdb.alarm_layer import Field, DataType
+from alarmdb.interface import AddCommand, AddSchemaCommand, DeleteCommand
+from alarmdb.nyql.grammar import parse_nyql
+from alarmdb.nyql.nyql_ast import NyQLTransformer
+from alarmdb.nyql.engine import NyQLEngine
 
 
 @pytest.fixture
@@ -232,3 +233,61 @@ def test_set_schema_with_empty_db_emits_no_deletes():
     res = run('SET SCHEMA ("x", INT, 1);', [], [])
     assert all(not isinstance(c, DeleteCommand) for c in res.commands)
     assert len(res.commands) == 1
+
+
+# ---------------- FLOAT ----------------
+
+
+@pytest.fixture
+def float_schema():
+    return [
+        Field("name", DataType.TEXT, 4, 0, 4),
+        Field("score", DataType.FLOAT, 4, 4, 8),
+    ]
+
+
+def test_set_schema_with_float_encodes_type_and_length():
+    res = run('SET SCHEMA ("score", FLOAT, 4);', [], [])
+    adds = [c for c in res.commands if isinstance(c, AddSchemaCommand)]
+    # FLOAT = 5, length 4 → (5 << 5) | (4-1) = 163
+    assert adds[0].data == 163
+    assert adds[0].label == "score"
+
+
+def test_set_schema_float_non_4_bytes_raises():
+    with pytest.raises(ValueError, match="FLOAT column .* must be 4 bytes"):
+        run('SET SCHEMA ("score", FLOAT, 1);', [], [])
+    with pytest.raises(ValueError, match="FLOAT column .* must be 4 bytes"):
+        run('SET SCHEMA ("score", FLOAT, 8);', [], [])
+
+
+def test_insert_float_encodes_ieee754(float_schema):
+    res = run('INSERT VALUES ("a", 1.5);', [], float_schema)
+    assert len(res.commands) == 1
+    add = res.commands[0]
+    assert isinstance(add, AddCommand)
+    assert add.num_bytes == 8
+    # Last 4 bytes are the float; mirrors read_bytes_as_float's encoding
+    expected_float_bits = struct.unpack("<I", struct.pack("<f", 1.5))[0]
+    assert add.data & 0xFFFFFFFF == expected_float_bits
+
+
+def test_insert_float_accepts_int(float_schema):
+    res = run('INSERT VALUES ("a", 2);', [], float_schema)
+    add = res.commands[0]
+    expected = struct.unpack("<I", struct.pack("<f", 2.0))[0]
+    assert add.data & 0xFFFFFFFF == expected
+
+
+def test_insert_float_rejects_non_numeric(float_schema):
+    with pytest.raises(TypeError, match="expected FLOAT"):
+        run('INSERT VALUES ("a", "nope");', [], float_schema)
+
+
+def test_update_float_field(float_schema):
+    records = [{"_id": 0, "name": "abc", "score": 1.0}]
+    res = run('UPDATE SET score = 3.25 WHERE TRUE;', records, float_schema)
+    add = res.commands[1]
+    assert isinstance(add, AddCommand)
+    expected = struct.unpack("<I", struct.pack("<f", 3.25))[0]
+    assert add.data & 0xFFFFFFFF == expected

@@ -1,8 +1,6 @@
-# AlarmDB
-
 <img src="docs/media/cover.png" alt="AlarmDB cover image" style="width:800px;"/>
 
-AlarmDB is a word-addressed, schema-driven row-based database backed by the iOS Clock app.
+AlarmDB is a memory-addressed, schema-driven row-based database backed by the iOS Clock app.
 
 It can be interfaced via NyQL, a bespoke SQL-like query language.
 
