@@ -1,63 +1,12 @@
-<img src="docs/media/cover.png" alt="AlarmDB cover image" style="width:800px;"/>
+# AlarmDB
 
-AlarmDB is a memory-addressed, schema-driven row-based database backed by the iOS Clock app.
+AlarmDB is a memory-addressed, schema-driven row-based database backed by the Apple Clock app. It also comes with NyQL, a bespoke SQL-like query language for interfacing with AlarmDB.
 
-It can be interfaced via NyQL, a bespoke SQL-like query language.
+Read the full writeup [here](https://marcos.ac/blog/nyql)!
 
-## Address space
+## Example queries
 
-We use a 5-bit architecture i.e. there are 32 possible addresses, from `0x00000` to `0x11111`. Each address refers to a word of 32 bytes. Bytes within the word are referenced by their byte offset.
-
-Conceptually, one memory address = one word = 32 bytes = one "row" of data in the database.
-
-## Encoding
-
-An iOS alarm contains the following parameters:
-
-- `Time` (e.g. `"12:15 PM"`)
-- `Repeat Days` (e.g. `["Monday", "Friday"]`)
-- `Is Enabled` (`"Yes"/"No"`)
-- `Allows Snooze` (`"Yes"/"No"`)
-- `Label` (arbitrary string)
-
-Note that we _could_ store all our data in the label, but that would be obviously cheating.
-
-### Addressing
-
-There are `24*60=1440` possible alarm times, which works out to 10.49 bits. AlarmDB uses the 10 full (i.e. least significant) bits for addressing: the first 5 bits encode the address of the word (`0-31`), and the next 5 bits encode the byte offset within the word (`0-31`).
-
-### Encoding the data byte
-
-To construct a single byte of data, we use the `Repeat Days`, `Is Enabled`, and `Allows Snooze` properties of an iOS alarm. The latter two are simple booleans i.e. one bit each.
-
-`Repeat Days` would seem to be equally simple, i.e. each weekday is treated as a bit (on or off), which would give us seven bits of data. However, due to a [bug in iOS Shortcuts](https://discussions.apple.com/thread/256008048?sortBy=rank), a Shortcut that tries to do anything with the `Repeat Days` of an alarm which has _exactly one_ repeat day will cause the Shortcut to fail. For this reason, we are forced to sacrifice one bit (I chose the Lord's day, Sunday) to guard against this possibility. Essentially, if the remaining six bits (days) is going to have a popcount of `1`, then the seventh bit (Sunday) flips on.
-
-Since the Lord's day is exempt from doing work, we have six bits from `Repeat Days` and two bits from the other two booleans, which gives us one even byte.
-
-### Encoding the schema
-
-Since we're only using the bottom 10 full bytes of the alarm address space, `0x10000000000-0x10110100000` i.e. 5:04PM-11:59PM is effectively "reserved" and we can use it to safely store the schema of the database separately from the data. In reality, only `0x10000000000-0x10000011111` (5:04PM-5:36PM) would be used because each record (word) has up to 32 bytes, so there can be at most 32 fields.
-
-The bits of a field's byte are broken up into two parts:
-
-- Bits 0-2: Data type
-- Bits 3-7: Length in bytes minus 1 (i.e. `0x00000 -> 1` and `0x11111 -> 32`)
-
-Despite allowing up to 8 data types, AlarmDB currently only supports five:
-
-- `TEXT` (`0x000`): Parsed as UTF-8, truncated by null terminator (`\x00`)
-- `UINT` (`0x001`): Parsed as an unsigned int
-- `INT` (`0x010`): Parsed as a two's complement signed int
-- `TIMESTAMP` (`0x011`): Parsed as an unsigned int and treated as a POSIX timestamp
-- `BOOLEAN` (`0x100`): `false` if every bit is off, `true` otherwise
-
-Here I caved slightly and used the alarm's `Label` solely for the purpose of naming the field. There's a way to do it without it (encode the strings in the rest of the reserved address space with a max field name length of 12), but I thought of that too late and no longer have the energy to implement :)
-
-Since the schema is user-defined, each record could be interpreted as a single 32-character string, 32 separate one-byte ints, or anything in between.
-
-## Querying: NyQL
-
-Interfacing with AlarmDB is simple thanks to NyQL, a SQL-like query language. Below are some examples of NyQL queries (note the absence of a `FROM` clause because there is only one table):
+Interfacing with AlarmDB is simple thanks to NyQL, a SQL-like query language. In the examples below, we perform "Alarmception" and encode alarm data as alarms in AlarmDB. Note the absence of the `FROM` clause, as there is only one table.
 
 ```sql
 -- Clears all rows and sets the schema for the table
@@ -159,32 +108,20 @@ Outputs ->
 SET SCHEMA ("name", TEXT, 8), ("age", INT, 1);
 ```
 
-## Running AlarmDB
+## Installing AlarmDB
 
-AlarmDB is easy-to-use, open-source, and free. To get started, download the following iOS shortcuts:
+AlarmDB is easy-to-use, open-source, and free. To get started, clone this repo and install the required packages with `uv sync`. Then, install the following Shortcuts:
 
-- [AlarmDB write](https://www.icloud.com/shortcuts/8b1ddb45834c4ab4b43f1d358f04ae03) (called internally)
-- [AlarmDB read](https://www.icloud.com/shortcuts/a1d47283e9a34785aed1c658ef81f2fb) (called internally)
-- [AlarmDB](https://www.icloud.com/shortcuts/0b5d7a254ce2484299ae7476e36c45a8) (entrypoint)
+- [NyQL write](https://www.icloud.com/shortcuts/96feeb006b4f444f9d140345c8b7e6fe) (called internally)
+- [NyQL read](https://www.icloud.com/shortcuts/6b29e8de9a184dcfa31d205a0bdd2846) (called internally)
+- [NyQL](https://www.icloud.com/shortcuts/c2dc76296bf04a0f9e5527891e1d4147) (entrypoint)
 
-You will need to update the `cd` command in the `Run Shell Script` action of the `AlarmDB` shortcut so it can navigate to your local copy of this repo.
-
-It's convenient to add the `AlarmDB` shortcut to Quick Actions so that you can run NyQL anywhere by selecting the text and going `Services > AlarmDB`.
+Notes:
+- You will need to update the placeholder `cd /path/to/your/alarmdb` in the `Run Shell Script` action of the `NyQL` shortcut to point to your local copy of this repo
+- If running on iOS, the `Run Shell Script` will need to be replaced with an equivalent `Run Script Over SSH` action
+- It's convenient to add the `AlarmDB` shortcut to Quick Actions so that you can run NyQL anywhere by highlighting the text, right clicking, and `Services > NyQL`
 
 ### Recommended IDEs
 
-- MacOS Notes app
-
-## Running on mobile
-
-AlarmDB was developed on desktop, but it can be run on mobile if the `Run Shell Script` action of the `AlarmDB` shortcut is replaced with a `Run Script Over SSH` action.
-
-## Other notes
-
-### NULLs
-
-There is no concept of a `NULL` value in AlarmDB. As long as there is at least one alarm (byte) in an address, it is assumed that the word at that address represents a full record. If there are no alarms in the byte offsets where the schema expects there to be, then they are assumed to be all zero. In other words, the "default" value for a missing int is `0`, `""` for missing strings, `false` for missing booleans, and `January 1, 1970` for missing timestamps.
-
-### Serialization limitations
-
-The `AlarmDB read` shortcut pipe-delimits alarm data, so `|` cannot be used in the name of any field in the schema (since those get written directly into the alarm's label).
+- Notes app
+- Messages app
